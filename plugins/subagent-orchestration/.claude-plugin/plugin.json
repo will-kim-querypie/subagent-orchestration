@@ -1,0 +1,19 @@
+{
+  "name": "subagent-orchestration",
+  "description": "Task-based subagent orchestration skill for plan/execute/review/commit workflows",
+  "version": "0.1.0",
+  "author": {
+    "name": "Will Kim",
+    "email": "will@chequer.io"
+  },
+  "homepage": "https://github.com/will-kim-querypie/subagent-orchestration",
+  "repository": "https://github.com/will-kim-querypie/subagent-orchestration",
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "agent-skills",
+    "orchestration",
+    "codex",
+    "claude-code"
+  ]
+}

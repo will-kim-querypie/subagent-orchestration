@@ -1,26 +1,26 @@
 # subagent-orchestration
 
-`subagent-orchestration` is a single skill for task-based agent workflows that route each task through:
+`subagent-orchestration` is a skill-first repository for task-based agent workflows that route each task through:
 
 `Plan -> Execute -> Review -> Commit`
 
-It is designed for subagent-capable clients where one main session stays in control and delegates task-local work in phases.
+The canonical skill content lives in [`skills/subagent-orchestration`](skills/subagent-orchestration). Claude marketplace support is packaged separately under [`plugins/subagent-orchestration`](plugins/subagent-orchestration) so the repository structure stays agent-neutral.
 
-## Install
+## Install With skills.sh
 
-List the skill before installing:
+List the available skill:
 
 ```bash
 npx skills add will-kim-querypie/subagent-orchestration --list
 ```
 
-Recommended global install for Codex:
+Install globally for Codex:
 
 ```bash
 npx skills add will-kim-querypie/subagent-orchestration -a codex -g
 ```
 
-Recommended global install for Claude Code:
+Install globally for Claude Code:
 
 ```bash
 npx skills add will-kim-querypie/subagent-orchestration -a claude-code -g
@@ -30,6 +30,28 @@ Project-local install also works:
 
 ```bash
 npx skills add will-kim-querypie/subagent-orchestration -a codex
+```
+
+## Install With Claude Marketplace
+
+Add the marketplace:
+
+```text
+/plugin marketplace add will-kim-querypie/subagent-orchestration
+```
+
+Install the plugin:
+
+```text
+/plugin install subagent-orchestration@subagent-orchestration
+```
+
+Claude plugin skills are namespaced, so invoke the skill as:
+
+```text
+/subagent-orchestration:subagent-orchestration config
+/subagent-orchestration:subagent-orchestration /absolute/path/to/plan.md
+/subagent-orchestration:subagent-orchestration Implement the approved plan
 ```
 
 ## Use
@@ -42,7 +64,7 @@ $subagent-orchestration /absolute/path/to/plan.md
 $subagent-orchestration "Implement the approved plan in task order"
 ```
 
-Claude Code:
+Claude Code via `skills.sh` install:
 
 ```text
 /subagent-orchestration config
@@ -50,37 +72,28 @@ Claude Code:
 /subagent-orchestration "Implement the approved plan in task order"
 ```
 
-## What The Skill Does
-
-- Resolves entry input as `config`, `plan_file`, `instructions`, or `conversation`
-- Prints the active provider role mapping before task work
-- Uses abstract model roles instead of hardcoding one provider into the core workflow
-- Keeps commit as a final main-session phase after review approval
-
 ## Repository Layout
 
 ```text
 .
-├── SKILL.md
+├── .claude-plugin/                 # Marketplace catalog
+├── plugins/
+│   └── subagent-orchestration/     # Claude plugin wrapper
+├── skills/
+│   └── subagent-orchestration/     # Canonical skill source
+├── scripts/
+│   └── test.sh                     # Local integration checks
+├── AGENTS.md
 ├── README.md
-├── LICENSE
-├── agents/
-├── config/
-├── references/
-└── scripts/
+└── LICENSE
 ```
-
-The repository root is the skill root so `npx skills add owner/repo` works without pointing at a nested path.
 
 ## Local Verification
 
-Run these from the repository root:
+Run the packaging and installation checks from the repository root:
 
 ```bash
-bash scripts/resolve-entry-input.sh
-bash scripts/resolve-entry-input.sh config
-bash scripts/print-model-mapping.sh codex
-bash scripts/print-model-mapping.sh claude-code
+bash scripts/test.sh
 ```
 
 ## License
