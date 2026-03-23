@@ -1,0 +1,22 @@
+{
+  "providers": {
+    "claude-code": {
+      "display_name": "Claude Code",
+      "skill_name": "subagent-orchestration",
+      "invocation_prefix": "/",
+      "roles": {
+        "most-capable": "Opus 4.6",
+        "general-executor": "Sonnet 4.6"
+      }
+    },
+    "codex": {
+      "display_name": "Codex",
+      "skill_name": "subagent-orchestration",
+      "invocation_prefix": "$",
+      "roles": {
+        "most-capable": "gpt-5.4 xhigh fast",
+        "general-executor": "gpt-5.4 medium fast"
+      }
+    }
+  }
+}

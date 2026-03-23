@@ -1,0 +1,4 @@
+interface:
+  display_name: "Subagent Orchestration"
+  short_description: "Task-based plan, execute, review, commit orchestration"
+  default_prompt: "Use $subagent-orchestration with a plan file path, execution instructions, or config to run or configure task-based orchestration from the main session."
