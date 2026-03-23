@@ -14,17 +14,42 @@ List the available skill:
 npx skills add will-kim-querypie/subagent-orchestration --list
 ```
 
-Install globally for Codex:
+### Global install
+
+Install for Codex:
 
 ```bash
 npx skills add will-kim-querypie/subagent-orchestration -a codex -g
 ```
 
-Install globally for Claude Code:
+Install for Claude Code:
 
 ```bash
 npx skills add will-kim-querypie/subagent-orchestration -a claude-code -g
 ```
+
+Verified `skills.sh` behavior:
+
+- For Codex, global installs keep the canonical copy under `~/.agents/skills/subagent-orchestration`.
+- For Claude Code, global installs materialize at `~/.claude/skills/subagent-orchestration`.
+- Project-local installs keep the canonical copy under `./.agents/skills/subagent-orchestration`.
+- For Codex, treat the canonical `.agents` path as the source of truth. Do not rely on a mirrored `~/.codex/skills/subagent-orchestration` directory being created.
+- In local verification, Claude Code global installs produced a materialized directory at `~/.claude/skills/subagent-orchestration` for both the default mode and `--copy`. Rely on the install path rather than symlink semantics.
+
+If `~/.claude/skills` does not exist yet, create it before reinstalling:
+
+```bash
+mkdir -p ~/.claude/skills
+npx skills add will-kim-querypie/subagent-orchestration -a claude-code -g
+```
+
+Install an independent Claude Code copy:
+
+```bash
+npx skills add will-kim-querypie/subagent-orchestration -a claude-code -g --copy
+```
+
+### Project-local install
 
 Project-local install also works:
 
@@ -70,6 +95,23 @@ Claude Code via `skills.sh` install:
 /subagent-orchestration config
 /subagent-orchestration /absolute/path/to/plan.md
 /subagent-orchestration "Implement the approved plan in task order"
+```
+
+Claude Code via `skills.sh --copy` uses the same invocation and the same install path. Treat `~/.claude/skills/subagent-orchestration` as the runtime location regardless of whether `skills.sh` materializes it via copy or another internal strategy.
+
+## Troubleshooting
+
+If a global Claude Code install finishes but `~/.claude/skills/subagent-orchestration` is missing, create the agent directory and reinstall:
+
+```bash
+mkdir -p ~/.claude/skills
+npx skills add will-kim-querypie/subagent-orchestration -a claude-code -g
+```
+
+If you want to request an explicit Claude Code copy install:
+
+```bash
+npx skills add will-kim-querypie/subagent-orchestration -a claude-code -g --copy
 ```
 
 ## Repository Layout

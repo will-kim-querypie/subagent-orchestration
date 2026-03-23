@@ -11,6 +11,12 @@ Marketplace-specific packaging lives under `plugins/`.
 npx skills add will-kim-querypie/subagent-orchestration
 ```
 
+For `skills.sh`, treat `skills/subagent-orchestration` as the repository source of truth.
+For Codex, global installs keep the canonical copy under `~/.agents/skills/subagent-orchestration`.
+For Claude Code, global installs materialize at `~/.claude/skills/subagent-orchestration`.
+Project-local installs keep the canonical copy under `./.agents/skills/subagent-orchestration`.
+Claude marketplace packaging remains separate under `plugins/`.
+
 ## Available Skills
 
 <available_skills>
