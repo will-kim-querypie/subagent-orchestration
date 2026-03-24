@@ -6,6 +6,9 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SKILL_DIR="$ROOT_DIR/skills/subagent-orchestration"
 PLUGIN_DIR="$ROOT_DIR/plugins/subagent-orchestration"
 
+# shellcheck source=scripts/test-lib.sh
+source "$ROOT_DIR/scripts/test-lib.sh"
+
 require_file() {
   local path="$1"
   [[ -f "$path" ]] || {
@@ -34,15 +37,6 @@ require_not_symlink() {
   local path="$1"
   [[ ! -L "$path" ]] || {
     printf 'ERROR: expected regular directory or file, got symlink: %s\n' "$path" >&2
-    exit 1
-  }
-}
-
-require_text() {
-  local path="$1"
-  local pattern="$2"
-  rg -q --fixed-strings "$pattern" "$path" || {
-    printf 'ERROR: missing text in %s: %s\n' "$path" "$pattern" >&2
     exit 1
   }
 }
@@ -88,6 +82,8 @@ require_file "$SKILL_DIR/references/review-profiles/simplify.md"
 require_file "$SKILL_DIR/scripts/resolve-review-profile.sh"
 require_file "$SKILL_DIR/scripts/init-review-artifacts.sh"
 require_file "$SKILL_DIR/scripts/cleanup-review-artifacts.sh"
+
+bash "$ROOT_DIR/scripts/test-require-text.sh"
 
 require_text "$ROOT_DIR/README.md" 'For Codex, global installs keep the canonical copy under `~/.agents/skills/subagent-orchestration`.'
 require_text "$ROOT_DIR/README.md" 'For Claude Code, global installs materialize at `~/.claude/skills/subagent-orchestration`.'
