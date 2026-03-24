@@ -70,12 +70,18 @@ require_file "$PLUGIN_DIR/.claude-plugin/plugin.json"
 require_file "$SKILL_DIR/SKILL.md"
 require_dir "$SKILL_DIR/scripts"
 require_dir "$SKILL_DIR/references"
+require_dir "$SKILL_DIR/references/review-profiles"
 require_dir "$SKILL_DIR/config"
 require_symlink "$PLUGIN_DIR/skills/subagent-orchestration"
+require_file "$SKILL_DIR/references/review-profiles/simplify.md"
+require_file "$SKILL_DIR/scripts/resolve-review-profile.sh"
+require_file "$SKILL_DIR/scripts/init-review-artifacts.sh"
+require_file "$SKILL_DIR/scripts/cleanup-review-artifacts.sh"
 
 require_text "$ROOT_DIR/README.md" 'For Codex, global installs keep the canonical copy under `~/.agents/skills/subagent-orchestration`.'
 require_text "$ROOT_DIR/README.md" 'For Claude Code, global installs materialize at `~/.claude/skills/subagent-orchestration`.'
 require_text "$ROOT_DIR/README.md" "mkdir -p ~/.claude/skills"
+require_text "$ROOT_DIR/README.md" '`Review profile: simplify`'
 require_text "$ROOT_DIR/AGENTS.md" "~/.agents/skills/subagent-orchestration"
 require_text "$ROOT_DIR/AGENTS.md" "~/.claude/skills/subagent-orchestration"
 
@@ -87,6 +93,74 @@ bash "$SKILL_DIR/scripts/resolve-entry-input.sh" config >/dev/null
 bash "$SKILL_DIR/scripts/print-model-mapping.sh" codex >/dev/null
 bash "$SKILL_DIR/scripts/print-model-mapping.sh" claude-code >/dev/null
 
+profile_path="$(bash "$SKILL_DIR/scripts/resolve-review-profile.sh" simplify)"
+[[ "$profile_path" == "$SKILL_DIR/references/review-profiles/simplify.md" ]] || {
+  printf 'ERROR: unexpected review profile path: %s\n' "$profile_path" >&2
+  exit 1
+}
+
+if bash "$SKILL_DIR/scripts/resolve-review-profile.sh" unknown-profile >/dev/null 2>&1; then
+  printf 'ERROR: resolve-review-profile should fail for unknown profiles\n' >&2
+  exit 1
+fi
+
+artifacts_output="$(bash "$SKILL_DIR/scripts/init-review-artifacts.sh" demo-task)"
+manifest_path="$(printf '%s\n' "$artifacts_output" | awk -F= '/^MANIFEST_PATH=/{print $2}')"
+artifact_dir="$(printf '%s\n' "$artifacts_output" | awk -F= '/^ARTIFACT_DIR=/{print $2}')"
+reuse_path="$(printf '%s\n' "$artifacts_output" | awk -F= '/^REUSE_FINDINGS_PATH=/{print $2}')"
+quality_path="$(printf '%s\n' "$artifacts_output" | awk -F= '/^QUALITY_FINDINGS_PATH=/{print $2}')"
+efficiency_path="$(printf '%s\n' "$artifacts_output" | awk -F= '/^EFFICIENCY_FINDINGS_PATH=/{print $2}')"
+fixer_path="$(printf '%s\n' "$artifacts_output" | awk -F= '/^FIXER_REPORT_PATH=/{print $2}')"
+
+require_file "$manifest_path"
+require_file "$reuse_path"
+require_file "$quality_path"
+require_file "$efficiency_path"
+require_file "$fixer_path"
+require_json_expr "$(cat "$manifest_path")" '
+  .task_id == "demo-task" and
+  .profile == "simplify" and
+  .artifact_dir == "'"$artifact_dir"'" and
+  .findings.reuse == "'"$reuse_path"'" and
+  .findings.quality == "'"$quality_path"'" and
+  .findings.efficiency == "'"$efficiency_path"'" and
+  .fixer_report == "'"$fixer_path"'"
+'
+case "$artifact_dir" in
+  "$ROOT_DIR/.git/subagent-orchestration/reviews/"*) ;;
+  *)
+    printf 'ERROR: expected repo-local artifact dir, got %s\n' "$artifact_dir" >&2
+    exit 1
+    ;;
+esac
+
+bash "$SKILL_DIR/scripts/cleanup-review-artifacts.sh" "$manifest_path"
+[[ ! -e "$artifact_dir" ]] || {
+  printf 'ERROR: artifact dir still exists after cleanup: %s\n' "$artifact_dir" >&2
+  exit 1
+}
+
+non_repo_workdir="$(canonical_dir "$(mktemp -d)")"
+(
+  cd "$non_repo_workdir"
+  fallback_output="$(bash "$SKILL_DIR/scripts/init-review-artifacts.sh" fallback-task)"
+  fallback_manifest="$(printf '%s\n' "$fallback_output" | awk -F= '/^MANIFEST_PATH=/{print $2}')"
+  fallback_artifact_dir="$(printf '%s\n' "$fallback_output" | awk -F= '/^ARTIFACT_DIR=/{print $2}')"
+  require_file "$fallback_manifest"
+  case "$fallback_artifact_dir" in
+    "${TMPDIR:-/tmp}/subagent-orchestration/"*) ;;
+    *)
+      printf 'ERROR: expected temp fallback artifact dir, got %s\n' "$fallback_artifact_dir" >&2
+      exit 1
+      ;;
+  esac
+  bash "$SKILL_DIR/scripts/cleanup-review-artifacts.sh" "$fallback_manifest"
+  [[ ! -e "$fallback_artifact_dir" ]] || {
+    printf 'ERROR: fallback artifact dir still exists after cleanup: %s\n' "$fallback_artifact_dir" >&2
+    exit 1
+  }
+)
+
 npx -y skills add "$ROOT_DIR" --list >/dev/null
 
 skills_workdir="$(canonical_dir "$(mktemp -d)")"
@@ -94,6 +168,12 @@ skills_workdir="$(canonical_dir "$(mktemp -d)")"
   cd "$skills_workdir"
   npx -y skills add "$ROOT_DIR" -a codex -a claude-code -y >/dev/null
   require_file "$skills_workdir/.agents/skills/subagent-orchestration/SKILL.md"
+  installed_skill_dir="$skills_workdir/.agents/skills/subagent-orchestration"
+  installed_profile_path="$(bash "$installed_skill_dir/scripts/resolve-review-profile.sh" simplify)"
+  [[ "$installed_profile_path" == "$installed_skill_dir/references/review-profiles/simplify.md" ]] || {
+    printf 'ERROR: unexpected installed profile path: %s\n' "$installed_profile_path" >&2
+    exit 1
+  }
   local_json="$(npx -y skills ls --json)"
   require_json_expr "$local_json" '
     length >= 1 and
@@ -110,6 +190,12 @@ codex_workdir="$(canonical_dir "$(mktemp -d)")"
   cd "$codex_workdir"
   HOME="$codex_home" npx -y skills add "$ROOT_DIR" -a codex -g -y >/dev/null
   require_file "$codex_home/.agents/skills/subagent-orchestration/SKILL.md"
+  installed_skill_dir="$codex_home/.agents/skills/subagent-orchestration"
+  installed_profile_path="$(HOME="$codex_home" bash "$installed_skill_dir/scripts/resolve-review-profile.sh" simplify)"
+  [[ "$installed_profile_path" == "$installed_skill_dir/references/review-profiles/simplify.md" ]] || {
+    printf 'ERROR: unexpected codex global profile path: %s\n' "$installed_profile_path" >&2
+    exit 1
+  }
   codex_json="$(HOME="$codex_home" npx -y skills ls -g -a codex --json)"
   require_json_expr "$codex_json" '
     length == 1 and
@@ -127,6 +213,12 @@ claude_skills_workdir="$(canonical_dir "$(mktemp -d)")"
   require_dir "$claude_skills_home/.claude/skills/subagent-orchestration"
   require_not_symlink "$claude_skills_home/.claude/skills/subagent-orchestration"
   require_file "$claude_skills_home/.claude/skills/subagent-orchestration/SKILL.md"
+  installed_skill_dir="$claude_skills_home/.claude/skills/subagent-orchestration"
+  installed_profile_path="$(HOME="$claude_skills_home" bash "$installed_skill_dir/scripts/resolve-review-profile.sh" simplify)"
+  [[ "$installed_profile_path" == "$installed_skill_dir/references/review-profiles/simplify.md" ]] || {
+    printf 'ERROR: unexpected claude global profile path: %s\n' "$installed_profile_path" >&2
+    exit 1
+  }
   claude_json="$(HOME="$claude_skills_home" npx -y skills ls -g -a claude-code --json)"
   require_json_expr "$claude_json" '
     length == 1 and
@@ -145,6 +237,12 @@ claude_copy_workdir="$(canonical_dir "$(mktemp -d)")"
   require_dir "$claude_copy_home/.claude/skills/subagent-orchestration"
   require_not_symlink "$claude_copy_home/.claude/skills/subagent-orchestration"
   require_file "$claude_copy_home/.claude/skills/subagent-orchestration/SKILL.md"
+  installed_skill_dir="$claude_copy_home/.claude/skills/subagent-orchestration"
+  installed_profile_path="$(HOME="$claude_copy_home" bash "$installed_skill_dir/scripts/resolve-review-profile.sh" simplify)"
+  [[ "$installed_profile_path" == "$installed_skill_dir/references/review-profiles/simplify.md" ]] || {
+    printf 'ERROR: unexpected claude copy profile path: %s\n' "$installed_profile_path" >&2
+    exit 1
+  }
   claude_copy_json="$(HOME="$claude_copy_home" npx -y skills ls -g -a claude-code --json)"
   require_json_expr "$claude_copy_json" '
     length == 1 and
@@ -166,6 +264,12 @@ claude_marketplace_workdir="$(canonical_dir "$(mktemp -d)")"
     exit 1
   }
   require_file "$plugin_json/skills/subagent-orchestration/SKILL.md"
+  installed_skill_dir="$plugin_json/skills/subagent-orchestration"
+  installed_profile_path="$(HOME="$claude_marketplace_home" bash "$installed_skill_dir/scripts/resolve-review-profile.sh" simplify)"
+  [[ "$installed_profile_path" == "$installed_skill_dir/references/review-profiles/simplify.md" ]] || {
+    printf 'ERROR: unexpected plugin profile path: %s\n' "$installed_profile_path" >&2
+    exit 1
+  }
 )
 
 printf 'All local packaging checks passed.\n'

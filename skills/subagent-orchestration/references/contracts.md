@@ -103,6 +103,65 @@ That startup display must preserve the exact configured model strings verbatim.
 - revalidation performed, if any
 - final summary for commit
 
+## Review Profiles
+
+### Default review
+
+Use the reviewer contract above.
+
+### `simplify`
+
+Trigger:
+
+- the task brief contains the exact line `Review profile: simplify`
+
+Main-session responsibilities:
+
+- resolve the bundled profile with `scripts/resolve-review-profile.sh`
+- create review artifacts with `scripts/init-review-artifacts.sh`
+- dispatch three read-only review subagents in parallel
+- keep detailed findings in files, not in main-session chat history
+- dispatch a single fixer only when one or more findings files contain issues
+- clean up review artifacts only after a successful fixer pass
+
+`simplify` reviewer input:
+
+- original task requirements
+- planner output
+- executor output
+- changed files
+- validation results
+- one assigned lens: `reuse`, `quality`, or `efficiency`
+- one assigned findings file path
+- the resolved `references/review-profiles/simplify.md` path
+
+`simplify` reviewer output:
+
+- status: `DONE` or `NO_FINDINGS`
+- assigned findings file path
+
+`simplify` reviewer rules:
+
+- do not spawn nested subagents
+- do not patch directly
+- write findings only to the assigned file
+- keep the main-session reply to status plus path only
+
+Fixer input:
+
+- artifact manifest path from `scripts/init-review-artifacts.sh`
+- changed files
+- validation checklist
+
+Fixer output:
+
+- decision: `approved` or `needs-more-work`
+- concise change summary
+- changed files
+- validation run and result
+- unresolved findings, if any
+- final summary for commit
+
 ## Commit Contract
 
 ### Commit input

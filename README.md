@@ -99,6 +99,23 @@ Claude Code via `skills.sh` install:
 
 Claude Code via `skills.sh --copy` uses the same invocation and the same install path. Treat `~/.claude/skills/subagent-orchestration` as the runtime location regardless of whether `skills.sh` materializes it via copy or another internal strategy.
 
+## Built-in Review Profile
+
+This skill includes one bundled review profile:
+
+- `Review profile: simplify`
+
+When a task brief includes `Review profile: simplify`, the main orchestrator keeps review orchestration in the main session:
+
+- it resolves the bundled profile from the installed skill path
+- it creates file-backed review artifacts under the current repo's `.git/subagent-orchestration/reviews/`
+- it fans out three read-only reviewers for `reuse`, `quality`, and `efficiency`
+- it dispatches one fixer only when one or more findings files contain issues
+
+Outside a git repository, review artifacts fall back to `${TMPDIR:-/tmp}/subagent-orchestration/`.
+
+`simplify` is a built-in profile, not an external runtime file path. Do not depend on `/tmp/simplify_skill.md` being present at execution time.
+
 ## Troubleshooting
 
 If a global Claude Code install finishes but `~/.claude/skills/subagent-orchestration` is missing, create the agent directory and reinstall:

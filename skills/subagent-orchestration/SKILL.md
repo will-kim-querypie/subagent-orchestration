@@ -20,8 +20,9 @@ This skill is for subagent-capable clients only.
 - The main session owns long-lived context.
 - Delegate planning to `most-capable`.
 - Delegate implementation to `general-executor`.
-- Delegate review to `most-capable`.
-- Reviewers may patch directly.
+- Delegate default review to `most-capable`.
+- Default reviewers may patch directly.
+- If the brief contains `Review profile: simplify`, keep review orchestration in the main session: fan out three read-only `most-capable` reviewers and, when findings exist, dispatch one `general-executor` fixer.
 - Commit is always a separate final phase in the main session.
 - Pass task-local context by default, not the full repository history.
 - If interruption makes state unclear, step back one phase instead of guessing.
@@ -89,6 +90,7 @@ Use examples only when you need a compact template:
 - `references/examples/task-brief.md`
 - `references/examples/review-brief.md`
 - `references/examples/commit-brief.md`
+- `references/review-profiles/simplify.md`
 
 Read the helper script when you need the exact input-resolution behavior:
 
@@ -96,6 +98,19 @@ Read the helper script when you need the exact input-resolution behavior:
 - `scripts/print-model-mapping.sh`
 - `scripts/config-model-mapping.sh`
 - `scripts/model-mapping.py`
+- `scripts/resolve-review-profile.sh`
+- `scripts/init-review-artifacts.sh`
+- `scripts/cleanup-review-artifacts.sh`
+
+## Review Profiles
+
+Built-in review profiles are opt-in.
+
+- Trigger them only when the task brief contains an explicit `Review profile: ...` line.
+- The only built-in profile in this skill is `Review profile: simplify`.
+- Resolve that profile with `bash scripts/resolve-review-profile.sh simplify`.
+- Initialize scratch artifacts with `bash scripts/init-review-artifacts.sh "<task-id>" simplify`.
+- Treat the returned `manifest.json` as the handoff anchor for the review fan-out and any follow-up fixer.
 
 ## Task Loop
 
@@ -104,7 +119,7 @@ After the entry input has been resolved and reviewed into an explicit plan, for 
 1. Create or refresh the task brief.
 2. Dispatch task planning.
 3. Dispatch task execution.
-4. Dispatch task review.
+4. Dispatch task review. If the brief contains `Review profile: simplify`, resolve the profile, initialize review artifacts, fan out three read-only reviewers, then dispatch a fixer from the findings manifest only when one or more reviewers found issues.
 5. If review approves, commit in the main session.
 
 ## Do Not Use This Skill When

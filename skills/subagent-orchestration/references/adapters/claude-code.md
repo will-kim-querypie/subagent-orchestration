@@ -27,6 +27,9 @@ These are the default Claude Code values. The live mapping is stored in `config/
 
 - reviewers may patch directly
 - reviewers should explicitly report patched files and rerun affected checks
+- `Review profile: simplify` should stay as main-session fan-out: three read-only reviewers plus one fixer
+- do not attempt nested subagent spawning for `simplify`
+- pass findings file paths between phases instead of replaying full findings into the main context
 
 ## Commit Guidance
 

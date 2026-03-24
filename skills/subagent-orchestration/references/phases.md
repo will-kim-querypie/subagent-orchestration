@@ -49,6 +49,15 @@ Rules:
 - if a reviewer patches, they must note which files changed
 - if a reviewer patches, they must rerun any affected validation
 
+When the task brief contains `Review profile: simplify`:
+
+- the main session owns the review fan-out
+- resolve the bundled profile and create review artifacts first
+- dispatch three read-only reviewers for `reuse`, `quality`, and `efficiency`
+- reviewers write findings to assigned files and return only status plus path
+- if one or more findings files contain issues, dispatch one fixer with the manifest path
+- the fixer reruns affected validation and cleans up artifacts only after success
+
 Exit condition:
 
 - decision is either `approved` or `needs-more-work`

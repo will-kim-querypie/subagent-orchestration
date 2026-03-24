@@ -27,6 +27,9 @@ These are the default Codex values. The live mapping is stored in `config/provid
 
 - reviewers may patch directly
 - reviewers should state what they changed and what they revalidated
+- `Review profile: simplify` should stay as main-session fan-out: three read-only reviewers plus one fixer
+- do not rely on deeper nesting or `agents.max_depth` changes for `simplify`
+- pass findings file paths between phases instead of replaying full findings into the main context
 
 ## Commit Guidance
 
