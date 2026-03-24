@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
+import textwrap
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -15,7 +17,9 @@ ROLE_USAGE = {
     "most-capable": "Plan, Review",
     "general-executor": "Execute",
 }
-BOX_WIDTH = 78
+DEFAULT_TTY_BOX_WIDTH = 78
+DEFAULT_NON_TTY_BOX_WIDTH = 60
+MIN_BOX_WIDTH = 44
 
 
 class Style:
@@ -48,6 +52,33 @@ class Style:
 
 
 STYLE = Style()
+
+
+def resolve_box_width() -> int:
+    override = os.environ.get("SUBAGENT_ORCHESTRATION_BANNER_WIDTH")
+    if override:
+        try:
+            width = int(override)
+        except ValueError as exc:
+            raise SystemExit(
+                "ERROR: SUBAGENT_ORCHESTRATION_BANNER_WIDTH must be an integer"
+            ) from exc
+        if width < MIN_BOX_WIDTH:
+            raise SystemExit(
+                f"ERROR: SUBAGENT_ORCHESTRATION_BANNER_WIDTH must be >= {MIN_BOX_WIDTH}"
+            )
+        return width
+
+    if sys.stdout.isatty():
+        columns = shutil.get_terminal_size(
+            fallback=(DEFAULT_TTY_BOX_WIDTH, 24)
+        ).columns
+        return max(MIN_BOX_WIDTH, min(DEFAULT_TTY_BOX_WIDTH, columns))
+
+    return DEFAULT_NON_TTY_BOX_WIDTH
+
+
+BOX_WIDTH = resolve_box_width()
 
 
 def load_config() -> dict:
@@ -106,6 +137,18 @@ def visible_len(text: str) -> int:
     return length
 
 
+def wrap_plain(text: str, max_len: int) -> list[str]:
+    if not text:
+        return [""]
+
+    return textwrap.wrap(
+        text,
+        width=max_len,
+        break_long_words=True,
+        break_on_hyphens=False,
+    ) or [""]
+
+
 def truncate_visible(text: str, max_len: int) -> str:
     if visible_len(text) <= max_len:
         return text
@@ -148,51 +191,91 @@ def box_bottom() -> str:
     return styled("└" + ("─" * (BOX_WIDTH - 2)) + "┘", STYLE.border)
 
 
+def box_text_lines(text: str, *styles: str) -> list[str]:
+    inner_width = BOX_WIDTH - 4
+    wrapped = wrap_plain(text, inner_width)
+    return [box_line(styled(part, *styles) if styles else part) for part in wrapped]
+
+
+def box_kv_lines(
+    label: str,
+    value: str,
+    *,
+    indent: int = 2,
+    label_width: int = 16,
+    label_styles: tuple[str, ...] = (),
+    value_styles: tuple[str, ...] = (),
+) -> list[str]:
+    inner_width = BOX_WIDTH - 4
+    prefix_plain = f"{' ' * indent}{label:<{label_width}} "
+    continuation_plain = " " * len(prefix_plain)
+    value_width = max(1, inner_width - len(prefix_plain))
+    wrapped = wrap_plain(value, value_width)
+
+    prefix = (" " * indent) + styled(f"{label:<{label_width}}", *label_styles) + " "
+    lines = [box_line(prefix + styled(wrapped[0], *value_styles))]
+    for part in wrapped[1:]:
+        lines.append(box_line(continuation_plain + styled(part, *value_styles)))
+    return lines
+
+
 def render_banner(provider_key: str, provider: dict, success_message: str | None = None) -> str:
     run_command, config_command = build_commands(provider_key, provider)
     lines: list[str] = [
         box_rule(styled("Subagent Orchestration", STYLE.title, STYLE.bold)),
-        box_line(
-            f"{styled('Provider', STYLE.label, STYLE.bold)}  "
-            f"{styled(provider['display_name'], STYLE.provider, STYLE.bold)} "
-            f"{styled(f'({provider_key})', STYLE.dim)}"
+        *box_kv_lines(
+            "Provider",
+            f"{provider['display_name']} ({provider_key})",
+            label_width=8,
+            label_styles=(STYLE.label, STYLE.bold),
+            value_styles=(STYLE.provider, STYLE.bold),
         ),
         box_line(),
-        box_line(styled("Role mappings", STYLE.accent, STYLE.bold)),
+        *box_text_lines("Role mappings", STYLE.accent, STYLE.bold),
     ]
 
     for role in ROLE_ORDER:
         model = provider["roles"][role]
         usage = ROLE_USAGE[role]
         quoted_model = f'"{model}"'
-        lines.append(
-            box_line(
-                f"  {styled(role, STYLE.label):16} "
-                f"{styled(quoted_model, STYLE.value, STYLE.bold)}"
+        lines.extend(
+            box_kv_lines(
+                role,
+                quoted_model,
+                label_styles=(STYLE.label,),
+                value_styles=(STYLE.value, STYLE.bold),
             )
         )
-        lines.append(
-            box_line(
-                f"  {styled('used for', STYLE.label):16} "
-                f"{styled(usage, STYLE.dim)}"
+        lines.extend(
+            box_kv_lines(
+                "used for",
+                usage,
+                label_styles=(STYLE.label,),
+                value_styles=(STYLE.dim,),
             )
         )
 
     lines.extend(
         [
             box_line(),
-            box_line(styled("Commands", STYLE.accent, STYLE.bold)),
-            box_line(
-                f"  {styled('Run', STYLE.label):16} {styled(run_command, STYLE.command)}"
+            *box_text_lines("Commands", STYLE.accent, STYLE.bold),
+            *box_kv_lines(
+                "Run",
+                run_command,
+                label_styles=(STYLE.label,),
+                value_styles=(STYLE.command,),
             ),
-            box_line(
-                f"  {styled('Configure', STYLE.label):16} {styled(config_command, STYLE.command)}"
+            *box_kv_lines(
+                "Configure",
+                config_command,
+                label_styles=(STYLE.label,),
+                value_styles=(STYLE.command,),
             ),
         ]
     )
 
     if success_message:
-        lines.extend([box_line(), box_line(styled(success_message, STYLE.success, STYLE.bold))])
+        lines.extend([box_line(), *box_text_lines(success_message, STYLE.success, STYLE.bold)])
 
     lines.append(box_bottom())
     return "\n".join(lines)
@@ -202,25 +285,30 @@ def print_provider_list(data: dict) -> None:
     provider_items = list(providers(data).items())
     lines = [
         box_rule(styled("Provider Selection", STYLE.title, STYLE.bold)),
-        box_line(styled("Registered LLM providers", STYLE.accent, STYLE.bold)),
+        *box_text_lines("Registered LLM providers", STYLE.accent, STYLE.bold),
         box_line(),
     ]
 
     for idx, (provider_key, provider) in enumerate(provider_items, start=1):
-        lines.append(
-            box_line(
-                f"  {styled(str(idx) + '.', STYLE.command, STYLE.bold):4} "
-                f"{styled(provider['display_name'], STYLE.provider, STYLE.bold)} "
-                f"{styled(f'({provider_key})', STYLE.dim)}"
+        lines.extend(
+            box_kv_lines(
+                f"{idx}.",
+                f"{provider['display_name']} ({provider_key})",
+                label_width=4,
+                label_styles=(STYLE.command, STYLE.bold),
+                value_styles=(STYLE.provider, STYLE.bold),
             )
         )
 
     lines.extend(
         [
             box_line(),
-            box_line(
-                f"{styled('Prompt', STYLE.label, STYLE.bold)}  "
-                f"{styled('Choose provider number:', STYLE.command)}"
+            *box_kv_lines(
+                "Prompt",
+                "Choose provider number:",
+                label_width=8,
+                label_styles=(STYLE.label, STYLE.bold),
+                value_styles=(STYLE.command,),
             ),
             box_bottom(),
         ]

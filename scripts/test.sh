@@ -99,6 +99,53 @@ bash "$SKILL_DIR/scripts/resolve-entry-input.sh" >/dev/null
 bash "$SKILL_DIR/scripts/resolve-entry-input.sh" config >/dev/null
 bash "$SKILL_DIR/scripts/print-model-mapping.sh" codex >/dev/null
 bash "$SKILL_DIR/scripts/print-model-mapping.sh" claude-code >/dev/null
+mapping_fixture_dir="$(canonical_dir "$(mktemp -d)")"
+(
+  trap 'rm -rf "$mapping_fixture_dir"' EXIT
+  cp -R "$SKILL_DIR" "$mapping_fixture_dir/skill"
+  fixture_config="$mapping_fixture_dir/skill/config/providers.json"
+  python3 - "$fixture_config" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+data = json.loads(config_path.read_text())
+data["providers"]["codex"]["roles"]["most-capable"] = (
+    "gpt-5.4 xhigh fast build 2026-03-25 extra long model mapping"
+)
+data["providers"]["codex"]["roles"]["general-executor"] = (
+    "gpt-5.4 medium fast build 2026-03-25 extra long executor mapping"
+)
+config_path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+  long_mapping_output="$(bash "$mapping_fixture_dir/skill/scripts/print-model-mapping.sh" codex)"
+  [[ "$long_mapping_output" == *"gpt-5.4 xhigh fast build 2026-03-25"* ]] || {
+    printf 'ERROR: long most-capable mapping prefix was not preserved in banner output\n' >&2
+    printf '%s\n' "$long_mapping_output" >&2
+    exit 1
+  }
+  [[ "$long_mapping_output" == *"extra long model mapping"* ]] || {
+    printf 'ERROR: long most-capable mapping suffix was not preserved in banner output\n' >&2
+    printf '%s\n' "$long_mapping_output" >&2
+    exit 1
+  }
+  [[ "$long_mapping_output" == *"gpt-5.4 medium fast build 2026-03-25"* ]] || {
+    printf 'ERROR: long general-executor mapping prefix was not preserved in banner output\n' >&2
+    printf '%s\n' "$long_mapping_output" >&2
+    exit 1
+  }
+  [[ "$long_mapping_output" == *"extra long executor mapping"* ]] || {
+    printf 'ERROR: long general-executor mapping suffix was not preserved in banner output\n' >&2
+    printf '%s\n' "$long_mapping_output" >&2
+    exit 1
+  }
+  [[ "$long_mapping_output" != *"…"* ]] || {
+    printf 'ERROR: long model mapping banner should wrap instead of truncating\n' >&2
+    printf '%s\n' "$long_mapping_output" >&2
+    exit 1
+  }
+)
 
 profile_path="$(bash "$SKILL_DIR/scripts/resolve-review-profile.sh" simplify)"
 [[ "$profile_path" == "$SKILL_DIR/references/review-profiles/simplify.md" ]] || {
