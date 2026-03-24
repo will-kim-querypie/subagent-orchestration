@@ -5,7 +5,7 @@ Review this task against the original brief.
 
 Review profile: simplify
 
-Artifact manifest: /absolute/path/to/.git/subagent-orchestration/reviews/task-123/manifest.json
+Artifact manifest: /absolute/path/to/<git-dir>/subagent-orchestration/reviews/task-123/manifest.json
 
 Required checks:
 - requirement fit

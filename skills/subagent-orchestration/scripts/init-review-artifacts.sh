@@ -34,11 +34,12 @@ safe_task_id="$(sanitize_token "$task_id")"
 
 bash "$SCRIPT_DIR/resolve-review-profile.sh" "$profile_name" >/dev/null
 
-if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
-  artifact_root="$git_root/.git/subagent-orchestration/reviews"
+if git_dir="$(git rev-parse --git-dir 2>/dev/null)" && git_dir="$(cd "$git_dir" && pwd -P)"; then
+  artifact_root="$git_dir/subagent-orchestration/reviews"
   artifact_scope="repo"
 else
-  artifact_root="${TMPDIR:-/tmp}/subagent-orchestration"
+  temp_root="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
+  artifact_root="$temp_root/subagent-orchestration"
   artifact_scope="temp"
 fi
 
@@ -57,6 +58,7 @@ jq -n \
   --arg task_id "$task_id" \
   --arg profile "$profile_name" \
   --arg artifact_scope "$artifact_scope" \
+  --arg artifact_root "$artifact_root" \
   --arg artifact_dir "$artifact_dir" \
   --arg reuse "$reuse_path" \
   --arg quality "$quality_path" \
@@ -66,6 +68,7 @@ jq -n \
     task_id: $task_id,
     profile: $profile,
     artifact_scope: $artifact_scope,
+    artifact_root: $artifact_root,
     artifact_dir: $artifact_dir,
     findings: {
       reuse: $reuse,

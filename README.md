@@ -108,7 +108,7 @@ This skill includes one bundled review profile:
 When a task brief includes `Review profile: simplify`, the main orchestrator keeps review orchestration in the main session:
 
 - it resolves the bundled profile from the installed skill path
-- it creates file-backed review artifacts under the current repo's `.git/subagent-orchestration/reviews/`
+- it creates file-backed review artifacts under the current repo's resolved git dir at `<git-dir>/subagent-orchestration/reviews/`
 - it fans out three read-only reviewers for `reuse`, `quality`, and `efficiency`
 - it dispatches one fixer only when one or more findings files contain issues
 

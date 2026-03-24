@@ -65,6 +65,17 @@ canonical_dir() {
   )
 }
 
+resolve_git_dir() {
+  local workdir="$1"
+  (
+    cd "$workdir"
+    local git_dir
+    git_dir="$(git rev-parse --git-dir)"
+    cd "$git_dir"
+    pwd -P
+  )
+}
+
 require_file "$ROOT_DIR/.claude-plugin/marketplace.json"
 require_file "$PLUGIN_DIR/.claude-plugin/plugin.json"
 require_file "$SKILL_DIR/SKILL.md"
@@ -111,6 +122,8 @@ reuse_path="$(printf '%s\n' "$artifacts_output" | awk -F= '/^REUSE_FINDINGS_PATH
 quality_path="$(printf '%s\n' "$artifacts_output" | awk -F= '/^QUALITY_FINDINGS_PATH=/{print $2}')"
 efficiency_path="$(printf '%s\n' "$artifacts_output" | awk -F= '/^EFFICIENCY_FINDINGS_PATH=/{print $2}')"
 fixer_path="$(printf '%s\n' "$artifacts_output" | awk -F= '/^FIXER_REPORT_PATH=/{print $2}')"
+repo_git_dir="$(resolve_git_dir "$ROOT_DIR")"
+repo_artifact_root="$repo_git_dir/subagent-orchestration/reviews"
 
 require_file "$manifest_path"
 require_file "$reuse_path"
@@ -120,6 +133,7 @@ require_file "$fixer_path"
 require_json_expr "$(cat "$manifest_path")" '
   .task_id == "demo-task" and
   .profile == "simplify" and
+  .artifact_root == "'"$repo_artifact_root"'" and
   .artifact_dir == "'"$artifact_dir"'" and
   .findings.reuse == "'"$reuse_path"'" and
   .findings.quality == "'"$quality_path"'" and
@@ -127,7 +141,7 @@ require_json_expr "$(cat "$manifest_path")" '
   .fixer_report == "'"$fixer_path"'"
 '
 case "$artifact_dir" in
-  "$ROOT_DIR/.git/subagent-orchestration/reviews/"*) ;;
+  "$repo_artifact_root/"*) ;;
   *)
     printf 'ERROR: expected repo-local artifact dir, got %s\n' "$artifact_dir" >&2
     exit 1
@@ -141,6 +155,7 @@ bash "$SKILL_DIR/scripts/cleanup-review-artifacts.sh" "$manifest_path"
 }
 
 non_repo_workdir="$(canonical_dir "$(mktemp -d)")"
+temp_root="$(canonical_dir "${TMPDIR:-/tmp}")"
 (
   cd "$non_repo_workdir"
   fallback_output="$(bash "$SKILL_DIR/scripts/init-review-artifacts.sh" fallback-task)"
@@ -148,15 +163,81 @@ non_repo_workdir="$(canonical_dir "$(mktemp -d)")"
   fallback_artifact_dir="$(printf '%s\n' "$fallback_output" | awk -F= '/^ARTIFACT_DIR=/{print $2}')"
   require_file "$fallback_manifest"
   case "$fallback_artifact_dir" in
-    "${TMPDIR:-/tmp}/subagent-orchestration/"*) ;;
+    "$temp_root/subagent-orchestration/"*) ;;
     *)
       printf 'ERROR: expected temp fallback artifact dir, got %s\n' "$fallback_artifact_dir" >&2
       exit 1
-      ;;
+    ;;
   esac
   bash "$SKILL_DIR/scripts/cleanup-review-artifacts.sh" "$fallback_manifest"
   [[ ! -e "$fallback_artifact_dir" ]] || {
     printf 'ERROR: fallback artifact dir still exists after cleanup: %s\n' "$fallback_artifact_dir" >&2
+    exit 1
+  }
+)
+
+worktree_parent="$(canonical_dir "$(mktemp -d)")"
+worktree_dir="$worktree_parent/worktree"
+git -C "$ROOT_DIR" worktree add --detach "$worktree_dir" HEAD >/dev/null
+(
+  trap 'git -C "$ROOT_DIR" worktree remove --force "$worktree_dir" >/dev/null 2>&1 || true; rm -rf "$worktree_parent"' EXIT
+  worktree_git_dir="$(resolve_git_dir "$worktree_dir")"
+  worktree_artifact_root="$worktree_git_dir/subagent-orchestration/reviews"
+  worktree_output="$(cd "$worktree_dir" && bash "$SKILL_DIR/scripts/init-review-artifacts.sh" worktree-task)"
+  worktree_manifest="$(printf '%s\n' "$worktree_output" | awk -F= '/^MANIFEST_PATH=/{print $2}')"
+  worktree_artifact_dir="$(printf '%s\n' "$worktree_output" | awk -F= '/^ARTIFACT_DIR=/{print $2}')"
+  require_file "$worktree_manifest"
+  require_json_expr "$(cat "$worktree_manifest")" '
+    .task_id == "worktree-task" and
+    .profile == "simplify" and
+    .artifact_root == "'"$worktree_artifact_root"'" and
+    .artifact_dir == "'"$worktree_artifact_dir"'"
+  '
+  case "$worktree_artifact_dir" in
+    "$worktree_artifact_root/"*) ;;
+    *)
+      printf 'ERROR: expected worktree-local artifact dir, got %s\n' "$worktree_artifact_dir" >&2
+      exit 1
+      ;;
+  esac
+  bash "$SKILL_DIR/scripts/cleanup-review-artifacts.sh" "$worktree_manifest"
+  [[ ! -e "$worktree_artifact_dir" ]] || {
+    printf 'ERROR: worktree artifact dir still exists after cleanup: %s\n' "$worktree_artifact_dir" >&2
+    exit 1
+  }
+)
+
+submodule_parent="$(canonical_dir "$(mktemp -d)")"
+(
+  trap 'rm -rf "$submodule_parent"' EXIT
+  parent_repo="$submodule_parent/parent"
+  submodule_dir="$parent_repo/submodule"
+  mkdir -p "$parent_repo"
+  cd "$parent_repo"
+  git init >/dev/null
+  git -c protocol.file.allow=always submodule add "$ROOT_DIR" submodule >/dev/null
+  submodule_git_dir="$(resolve_git_dir "$submodule_dir")"
+  submodule_artifact_root="$submodule_git_dir/subagent-orchestration/reviews"
+  submodule_output="$(cd "$submodule_dir" && bash "$SKILL_DIR/scripts/init-review-artifacts.sh" submodule-task)"
+  submodule_manifest="$(printf '%s\n' "$submodule_output" | awk -F= '/^MANIFEST_PATH=/{print $2}')"
+  submodule_artifact_dir="$(printf '%s\n' "$submodule_output" | awk -F= '/^ARTIFACT_DIR=/{print $2}')"
+  require_file "$submodule_manifest"
+  require_json_expr "$(cat "$submodule_manifest")" '
+    .task_id == "submodule-task" and
+    .profile == "simplify" and
+    .artifact_root == "'"$submodule_artifact_root"'" and
+    .artifact_dir == "'"$submodule_artifact_dir"'"
+  '
+  case "$submodule_artifact_dir" in
+    "$submodule_artifact_root/"*) ;;
+    *)
+      printf 'ERROR: expected submodule-local artifact dir, got %s\n' "$submodule_artifact_dir" >&2
+      exit 1
+      ;;
+  esac
+  bash "$SKILL_DIR/scripts/cleanup-review-artifacts.sh" "$submodule_manifest"
+  [[ ! -e "$submodule_artifact_dir" ]] || {
+    printf 'ERROR: submodule artifact dir still exists after cleanup: %s\n' "$submodule_artifact_dir" >&2
     exit 1
   }
 )
